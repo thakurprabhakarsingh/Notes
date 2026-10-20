@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NotesHub - College Notes</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background-color: #ffffff; color: #1f2937; font-family: system-ui, -apple-system, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-50 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+    <div class="max-w-6xl mx-auto flex items-center justify-between gap-4">
+      <span class="text-xl font-bold tracking-tight text-blue-600">Notes<span class="text-gray-900">Hub</span></span>
+      
+      <!-- Free Read Limit Tracker -->
+      <div class="flex items-center gap-3">
+        <div class="bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5">
+          <i class="fa-solid fa-bolt"></i>
+          <span id="readCountText">Reads: 0/9 this week</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-6xl mx-auto px-4 py-6 w-full flex-1">
+    
+    <!-- Search Bar -->
+    <div class="relative mb-4">
+      <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-gray-400"></i>
+      <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search by Subject, Course, or College..." 
+        class="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
+    </div>
+
+    <!-- Filters Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
+      <select id="courseFilter" onchange="applyFilters()" class="bg-white border border-gray-300 rounded-lg px-2.5 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <option value="">All Courses</option>
+        <option value="B.Tech">B.Tech</option>
+        <option value="BCA">BCA</option>
+        <option value="Diploma">Diploma</option>
+      </select>
+
+      <select id="branchFilter" onchange="applyFilters()" class="bg-white border border-gray-300 rounded-lg px-2.5 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <option value="">All Branches</option>
+        <option value="CSE">CSE</option>
+        <option value="IT">IT</option>
+        <option value="ECE">ECE</option>
+      </select>
+
+      <select id="semFilter" onchange="applyFilters()" class="bg-white border border-gray-300 rounded-lg px-2.5 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <option value="">All Semesters</option>
+        <option value="1">Sem 1</option>
+        <option value="2">Sem 2</option>
+        <option value="3">Sem 3</option>
+        <option value="4">Sem 4</option>
+        <option value="5">Sem 5</option>
+        <option value="6">Sem 6</option>
+        <option value="7">Sem 7</option>
+        <option value="8">Sem 8</option>
+      </select>
+
+      <select id="sortFilter" onchange="applyFilters()" class="bg-white border border-gray-300 rounded-lg px-2.5 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <option value="rating">Top Rated First</option>
+        <option value="searches">Most Popular First</option>
+      </select>
+    </div>
+
+    <!-- Notes Grid -->
+    <div id="notesContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Notes loaded dynamically -->
+    </div>
+  </main>
+
+  <script>
+    let notesData = [];
+    const MAX_FREE_READS = 9;
+
+    function getWeeklyReads() {
+      const stored = JSON.parse(localStorage.getItem('user_reads_tracker') || '{}');
+      const now = new Date();
+      const oneJan = new Date(now.getFullYear(), 0, 1);
+      const numberOfDays = Math.floor((now - oneJan) / (24 * 60 * 60 * 1000));
+      const currentWeek = `${now.getFullYear()}-W${Math.ceil((now.getDay() + 1 + numberOfDays) / 7)}`;
+      
+      if (stored.week !== currentWeek) {
+        return { week: currentWeek, count: 0 };
+      }
+      return stored;
+    }
+
+    function updateReadUI() {
+      const tracker = getWeeklyReads();
+      document.getElementById('readCountText').innerText = `Reads: ${tracker.count}/${MAX_FREE_READS} this week`;
+    }
+
+    async function fetchNotes() {
+      try {
+        const res = await fetch('notes.json');
+        notesData = await res.json();
+        applyFilters();
+      } catch (err) {
+        console.error('Error loading notes:', err);
+      }
+    }
+
+    function renderNotes(items) {
+      const container = document.getElementById('notesContainer');
+      container.innerHTML = '';
+
+      if (items.length === 0) {
+        container.innerHTML = `<div class="col-span-full py-12 text-center text-sm text-gray-500">No notes available yet. Use Termux script to upload.</div>`;
+        return;
+      }
+
+      items.forEach(note => {
+        const card = document.createElement('div');
+        card.className = "bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow transition flex flex-col justify-between";
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+              <span class="bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded">${note.course} • ${note.branch} (Sem ${note.semester})</span>
+              <span class="flex items-center gap-1 text-amber-500 font-semibold">
+                <i class="fa-solid fa-star text-[10px]"></i> ${note.rating}
+              </span>
+            </div>
+            <h4 class="font-semibold text-gray-800 text-sm mb-1">${note.title}</h4>
+            <p class="text-xs text-gray-500 mb-3">${note.college} • File: ${note.fileSize || 'PDF'}</p>
+          </div>
+          <div class="pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+            <button onclick="readNote('${note.telegramUrl}')" class="flex-1 bg-slate-100 hover:bg-slate-200 text-gray-700 py-1.5 px-3 rounded-lg text-xs font-medium text-center transition">
+              Read Online
+            </button>
+            <button onclick="downloadNote('${note.telegramUrl}')" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-3 rounded-lg text-xs font-medium text-center transition">
+              Download PDF
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function applyFilters() {
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      const course = document.getElementById('courseFilter').value;
+      const branch = document.getElementById('branchFilter').value;
+      const sem = document.getElementById('semFilter').value;
+      const sortBy = document.getElementById('sortFilter').value;
+
+      let filtered = notesData.filter(note => {
+        const matchQuery = note.title.toLowerCase().includes(query) || 
+                           note.subject.toLowerCase().includes(query) || 
+                           note.college.toLowerCase().includes(query);
+        const matchCourse = !course || note.course === course;
+        const matchBranch = !branch || note.branch === branch;
+        const matchSem = !sem || note.semester == sem;
+        return matchQuery && matchCourse && matchBranch && matchSem;
+      });
+
+      if (sortBy === 'rating') {
+        filtered.sort((a, b) => b.rating - a.rating);
+      } else if (sortBy === 'searches') {
+        filtered.sort((a, b) => b.searches - a.searches);
+      }
+
+      renderNotes(filtered);
+    }
+
+    function readNote(url) {
+      let tracker = getWeeklyReads();
+      if (tracker.count >= MAX_FREE_READS) {
+        alert("Aapka is hafte ka 9 free reads quota khatam ho chuka hai! Extra padhne ke liye Ad dekhein ya Premium lein.");
+        return;
+      }
+      tracker.count += 1;
+      localStorage.setItem('user_reads_tracker', JSON.stringify(tracker));
+      updateReadUI();
+      window.open(url, '_blank');
+    }
+
+    function downloadNote(url) {
+      window.open(url, '_blank');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      updateReadUI();
+      fetchNotes();
+    });
+  </script>
+</body>
+</html>
